@@ -1,13 +1,13 @@
 import socket
 import sys
-import DualBME280s
+import Imports/DualBME280s
 import datetime
 import time
 import threading
-from UFC6000 import FrequencyCounter
-from koheron_control import *
-from arduino_lock_cmd_dual_output import *
-from arduno_lock_cmd import *
+from Imports/UFC6000 import FrequencyCounter
+from Imports/koheron_control import *
+from Imports/arduino_lock_cmd_dual_output import *
+from Imports/arduno_lock_cmd import *
 
 
 
@@ -194,8 +194,6 @@ def run():
         
         print("over")
     return True
-    
-        
 
 def main():
 
@@ -307,8 +305,4 @@ def main():
             
         conn.close()
 
-
-        
-   
-    
 main()
