@@ -4,7 +4,6 @@ import time
 import numpy as np
 from datetime import datetime
 import os
-#import zmq
 import datetime
 import sys
 import threading
@@ -293,81 +292,3 @@ class ArduinoCurrentLocker:
         self.params[10] = alpha
         self.set_params()
         print("Low-pass cutoff changed to %.0f Hz (alpha= %.3f)"%(new_lp,alpha))
-        
-
-#def scan_freq_nsteps(n_steps):
-#    """ Set the number of steps"""
-#    cslock.params[6] = int(n_steps)
-#    cslock.set_params()
-    
-# def scan_freq(frequency):
-#     """ Set the frequecncy in Hz """
-#     freq_to_steps = 10.5263157895 #conversion between frequency and n steps in units steps/Hz
-#     new_steps = int(round(freq_to_steps*frequency))
-#     cslock.params[6] = int(new_steps)
-#     cslock.set_params()
-
-# def publish_data():
-#     publisher = zmq_pub_dict(5553,'cs_laser')
-#     cslock.ser.write(b'm')
-#     local_accumulator = 0
-#     try:
-#         while True:
-#             err,corr = cslock.get_data()
-#             data = (err,corr)
-#             publisher.publish_data(data)
-
-#     except KeyboardInterrupt:
-#         pass
-#     cslock.ser.write(b'm')
-#     publisher.close()
-
-
-# def quit():
-#     print("Loop exited")
-#     publishOff()
-#     loop_running = False
-
-# def start():
-#     print("Loop starting")
-#     publishOn()
-#     loop_running = True
-
-#if __name__ == '__main__':
-#    cslock = CsLock()
-
-#cslock = CsLock()
-
-# loop_running = True
-# local_accumulator = 0
-# while(loop_running):
-#     try:
-#         if(publish):
-#             try:
-#                 err,corr = cslock.get_data()
-#                 local_accumulator+=err
-#                 msg = 'ok'
-#                 if(np.abs(local_accumulator)>10000.0):
-#                     msg = 'out of lock'
-#                 data = (err,corr,msg)
-#                 publisher.publish_data(data)
-#             except:
-#                 pass
-
-#         if(new_input):
-#             try:
-#                 exec(kbd_input)
-#             except:
-#                 print("Invalid input")
-#             new_input = False
-#             listener = threading.Thread(target=commandListener, daemon=True)
-#             listener.start()
-
-#     except(KeyboardInterrupt):
-#         print("Loop exited")
-#         cslock.ser.write(b'm')
-#         loop_running = False
-#         break
-
-#publisher.close()
-#cslock.close()
