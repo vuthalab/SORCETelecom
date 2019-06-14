@@ -1,13 +1,13 @@
 import socket
 import sys
-import Imports/DualBME280s
+import Imports.DualBME280s
 import datetime
 import time
 import threading
-from Imports/UFC6000 import FrequencyCounter
-from Imports/koheron_control import *
-from Imports/arduino_lock_cmd_dual_output import *
-from Imports/arduno_lock_cmd import *
+from Imports.UFC6000 import FrequencyCounter
+from Imports.koheron_control import *
+from Imports.arduino_lock_cmd_dual_output import *
+from Imports.arduno_lock_cmd import *
 
 
 
@@ -65,19 +65,21 @@ def associate(Data,conn):
             if Data[3:10] == ".write(":
                 command = Data[10:len(Data)-1]
                 kc1.write(command)
+                message = "Command has been written"
             elif Data[3:8] == ".ask(":
                 command = Data[8:len(Data)-1]
                 message = "Response: " +str(kc1.ask(command))
             elif Data[3:9] == ".close":
                 kc1.close()
+                message = "Closed"
             elif Data[3:13] == ".set_temp(":
                 temp = float(Data[12:len(Data)-1])
                 kc1.set_temp(temp)
                 message = "Temperature has been set to: " + str(temp)
             elif Data[3:17] == ".read_set_temp":
-                message = "Read Temperature: " + str(kc1.read_set_temp())
+                message = "Set Temperature: " + str(kc1.read_set_temp())
             elif Data[3:13] == ".read_temp":
-                message = str(kc1.read_temp())
+                message = "Temperature is:" + str(kc1.read_temp())
             elif Data[3:16] == ".set_current(":
                 curr = float(Data[16:len (Data)-1])
                 kc1.set_current(curr)
@@ -89,7 +91,7 @@ def associate(Data,conn):
                 kc1.laser_off()
                 message = "Laser has been turned off"
             elif Data[3:16] == ".read_current":
-                message = str(kc1.read_current())
+                message = "Current is of: " + str(kc1.read_current())
             elif Data[3:21] == ".increase_current(":
                 adj = float(Data[21:len(Data)-1])
                 kc1.increase_current(adj)
@@ -100,52 +102,59 @@ def associate(Data,conn):
                 message = "Current has been decreased to: " + str(adj)
             elif Data[3:13] == ".get_temp(":
                 res = float(Data[13:len(Data)-1])
-                message = " Temp is of " + str(kc1.get_temp(res))
+                message = " Temperature is of " + str(kc1.get_temp(res))
             elif Data[3:19] == ".get_resistance(":
                 temp = float(Data[19:len(Data)-1])
-                message = "The resistance is of: "str(kc1.get_resistance(temp))
+                message = "The resistance is of: "+ str(kc1.get_resistance(temp))
         if Data[2] == "2":
             if Data[3:10] == ".write(":
                 command = Data[10:len(Data)-1]
                 kc2.write(command)
+                message = "Command has been written"
             elif Data[3:8] == ".ask(":
                 command = Data[8:len(Data)-1]
-                message = str(kc2.ask(command))
+                message = "Response: " +str(kc2.ask(command))
             elif Data[3:9] == ".close":
                 kc2.close()
+                message = "Closed"
             elif Data[3:13] == ".set_temp(":
                 temp = float(Data[12:len(Data)-1])
                 kc2.set_temp(temp)
+                message = "Temperature has been set to: " + str(temp)
             elif Data[3:17] == ".read_set_temp":
-                message = str(kc2.read_set_temp())
+                message = "Set Temperature: " + str(kc2.read_set_temp())
             elif Data[3:13] == ".read_temp":
-                message = str(kc2.read_temp())
+                message = "Temperature is:" + str(kc2.read_temp())
             elif Data[3:16] == ".set_current(":
                 curr = float(Data[16:len (Data)-1])
                 kc2.set_current(curr)
+                message = "Current has been set to: " + str(curr)
             elif Data[3:12] == ".laser_on":
                 kc2.laser_on()
+                message = "Laser has been turned On"
             elif Data[3:13] == ".laser_off":
                 kc2.laser_off()
+                message = "Laser has been turned off"
             elif Data[3:16] == ".read_current":
-                message = str(kc1.read_current())
+                message = "Current is of: " + str(kc2.read_current())
             elif Data[3:21] == ".increase_current(":
                 adj = float(Data[21:len(Data)-1])
                 kc2.increase_current(adj)
+                message = "Current has been increased to: " + str(adj)
             elif Data[3:21] == ".decrease_current(":
                 adj = float(Data[21:len(Data)-1])
                 kc2.decrease_current(adj)
+                message = "Current has been decreased to: " + str(adj)
             elif Data[3:13] == ".get_temp(":
                 res = float(Data[13:len(Data)-1])
-                message = str(kc2.get_temp(res))
+                message = " Temperature is of " + str(kc2.get_temp(res))
             elif Data[3:19] == ".get_resistance(":
                 temp = float(Data[19:len(Data)-1])
-                message = str(kc2.get_resistance(temp))                
-                
+                message = "The resistance is of: "+ str(kc2.get_resistance(temp))                           
+
     if message == "":
         message = "Invalid Input"
 
-    
     return message
 
 
@@ -175,10 +184,10 @@ def run():
             DataLog = open("DataLog.txt","a+")
             try:
                 temp = DualBME280s.temp()
-                #freq = freqCounter()
+                freq = freqCounter()
                 
                 
-                message = str(datetime.datetime.now())+"\t" + str(temp[0]) + "\t" + str(temp[1]) + "\t\n" #+ str(freq[1]) + "\n"
+                message = str(datetime.datetime.now())+"\t" + str(temp[0]) + "\t" + str(temp[1]) + "\t" + str(freq[1]) + "\n"
                 DataLog.write(message)
                 dConn.sendto(message.encode(),dAddr)
             except:
@@ -189,11 +198,11 @@ def run():
               
                 
             DataLog.close()
-            
-            
         
         print("over")
     return True
+    
+        
 
 def main():
 
@@ -268,13 +277,10 @@ def main():
                 print("Disonnection at",addr)
 
                 log.close()
-
-                
                 Started = False
                 conn.close()
 
                 break
-            
             
             if not data:
                 break
@@ -303,6 +309,7 @@ def main():
                 logLine = "Time: " + str(datetime.datetime.now()) + " Input: " + data.decode() + " Output: " + message + "\n"
                 log.write(logLine)
             
-        conn.close()
-
+        conn.close()    
+   
+    
 main()
