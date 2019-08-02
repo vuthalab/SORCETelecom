@@ -58,4 +58,4 @@ class FrequencyCounter:
         rval = os.read(self.fc,64).decode('UTF-8').split("\x00")[0]
         val = rval.encode(encoding='UTF-8') #Encode the value again to "fix" the return value as to add a binary "b" to it.
         return val[1]
- 
+    

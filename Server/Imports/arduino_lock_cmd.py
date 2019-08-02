@@ -4,6 +4,7 @@ import time
 import numpy as np
 from datetime import datetime
 import os
+#import zmq
 import datetime
 import sys
 import threading
@@ -178,7 +179,7 @@ class ArduinoCurrentLocker:
         self.ser.write(b's'+data)
         time.sleep(0.1)
         s = self.ser.readline()
-        print(s)
+        return s
 
     def set_scan_state(self,scan_state):
         self.params[5] = int(scan_state)
@@ -199,7 +200,8 @@ class ArduinoCurrentLocker:
     def get_sampling_rate(self):
         self.ser.write(b't')
         sampling_time = self.ser.readline()
-        print("Loop period: %i us"%int(sampling_time))
+        message ="Loop period: " + str(int(sampling_time)) + " us"
+        return message
 
     def close(self):
         self.ser.close()
@@ -208,15 +210,17 @@ class ArduinoCurrentLocker:
     def print_params(self):
         self.get_params()
         """ Print the current parameters on the microcontroller. """
-        print('Ramp amplitude = {0:.3f} V'.format(self.params[0]))
-        print('Ramp frequency = {0:.3f} Hz'.format(self.params[6]))
-        print("Output offset = {0:.3f} V".format(ToVoltage(self.params[4]-ZEROV)))
-        print('Servo Gain Parameters: P = {0:.3f}, I = {1:.3e}, I2 = {2:.3e}'.format(self.params[1],self.params[2],self.params[3]))
-        print('Scan On/Off: {0:.0f}'.format(self.params[5]))
-        print('Lock point: {0:.2f} V'.format(ToVoltage(self.params[8]-ZEROV)))
-        print("FWHM: %.3f V"%self.params[7])
-        print("N averages: %i"%self.params[9])
-        print("Alpha : %.3f"%(self.params[10]))
+        message = ""
+        message += 'Ramp amplitude = {0:.3f} V'.format(self.params[0]) + "\n"
+        message += 'Ramp frequency = {0:.3f} Hz'.format(self.params[6]) + "\n"
+        message += "Output offset = {0:.3f} V".format(ToVoltage(self.params[4]-ZEROV)) + "\n"
+        message += 'Servo Gain Parameters: P = {0:.3f}, I = {1:.3e}, I2 = {2:.3e}'.format(self.params[1],self.params[2],self.params[3]) + "\n"
+        message += 'Scan On/Off: {0:.0f}'.format(self.params[5]) + "\n"
+        message += 'Lock point: {0:.2f} V'.format(ToVoltage(self.params[8]-ZEROV)) + "\n"
+        message += "FWHM: %.3f V"%self.params[7] + "\n"
+        message += "N averages: %i"%self.params[9] + "\n"
+        message += "Alpha : %.3f"%(self.params[10]) + "\n"
+        return message
     
     def scan_amp(self,new_amplitude):
         """Set scan amplitude on the microcontroller in Volts."""
@@ -249,7 +253,7 @@ class ArduinoCurrentLocker:
         """ Set the proportional gain. Use a positive gain to lock to a positive slope error signal.  """
         self.params[1] = p_gain
         self.set_params()
-        print("Proportional gain updated to:" + str(p_gain))
+        return "Proportional gain updated to:" + str(p_gain)
     
     def gain_i(self,i_gain):
         """ Set the integral gain """
@@ -291,4 +295,82 @@ class ArduinoCurrentLocker:
         alpha = del_t/(rc+del_t)
         self.params[10] = alpha
         self.set_params()
-        print("Low-pass cutoff changed to %.0f Hz (alpha= %.3f)"%(new_lp,alpha))
+        return "Low-pass cutoff changed to %.0f Hz (alpha= %.3f)"%(new_lp,alpha)
+        
+
+#def scan_freq_nsteps(n_steps):
+#    """ Set the number of steps"""
+#    cslock.params[6] = int(n_steps)
+#    cslock.set_params()
+    
+# def scan_freq(frequency):
+#     """ Set the frequecncy in Hz """
+#     freq_to_steps = 10.5263157895 #conversion between frequency and n steps in units steps/Hz
+#     new_steps = int(round(freq_to_steps*frequency))
+#     cslock.params[6] = int(new_steps)
+#     cslock.set_params()
+
+# def publish_data():
+#     publisher = zmq_pub_dict(5553,'cs_laser')
+#     cslock.ser.write(b'm')
+#     local_accumulator = 0
+#     try:
+#         while True:
+#             err,corr = cslock.get_data()
+#             data = (err,corr)
+#             publisher.publish_data(data)
+
+#     except KeyboardInterrupt:
+#         pass
+#     cslock.ser.write(b'm')
+#     publisher.close()
+
+
+# def quit():
+#     print("Loop exited")
+#     publishOff()
+#     loop_running = False
+
+# def start():
+#     print("Loop starting")
+#     publishOn()
+#     loop_running = True
+
+#if __name__ == '__main__':
+#    cslock = CsLock()
+
+#cslock = CsLock()
+
+# loop_running = True
+# local_accumulator = 0
+# while(loop_running):
+#     try:
+#         if(publish):
+#             try:
+#                 err,corr = cslock.get_data()
+#                 local_accumulator+=err
+#                 msg = 'ok'
+#                 if(np.abs(local_accumulator)>10000.0):
+#                     msg = 'out of lock'
+#                 data = (err,corr,msg)
+#                 publisher.publish_data(data)
+#             except:
+#                 pass
+
+#         if(new_input):
+#             try:
+#                 exec(kbd_input)
+#             except:
+#                 print("Invalid input")
+#             new_input = False
+#             listener = threading.Thread(target=commandListener, daemon=True)
+#             listener.start()
+
+#     except(KeyboardInterrupt):
+#         print("Loop exited")
+#         cslock.ser.write(b'm')
+#         loop_running = False
+#         break
+
+#publisher.close()
+#cslock.close()
