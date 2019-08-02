@@ -2,34 +2,48 @@ import socket
 import time
 import threading
 import os
-os.chdir("/home/labuser/Desktop")
+#os.chdir("/home/labuser/Desktop")
 
 
 
 ## function definitions
 def dataGetter():
-    global d
+    
+    dhost = 'localhost'#'192.168.0.148'
+    dport = 1329
+
+
+    d = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+
+    try:
+        d.connect((dhost,dport))
+    except:
+        dport = dport+1
+        d.connect((dhost,dport))
+        
     while True:
+
         connected = True
         try:
-            log = open("data.txt","a+")
+            log = open("NewDataAugust2nd.txt","a+")
         except:
             print("Already Opened")
         try:
             val = (d.recv(1024)).decode()
-            log.write(val + "\n")
+            if val != "":
+                log.write(val + "\n")
         except:
-            # print("Exception")
+            print("Exception")
             connected = False
             while not connected:
-                if dGet == False: break
-                # print("in")
+                print("in")
                 d.close()
                 d = socket.socket()
                 d.connect((dhost,dport))
                 connected = True
                 # print("Out")
         try:
+            #print("closed")
             log.close()
         except:
             print("Already Closed")
@@ -37,11 +51,8 @@ def dataGetter():
 
 
 ## main routines
-host = '172.20.3.181'
+host = 'localhost'#'192.168.0.148'
 port = 1313
-
-dhost = '172.20.3.181'
-dport = 1329
 
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -59,11 +70,7 @@ while True:
     s.sendall(("Start").encode())
 
     time.sleep(2)
-    d = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    try:
-        d.connect((dhost,dport))
-    except:
-        d.connect((dhost,dport+1))
+    
     print("ok")
     dGet = True
     threadData = threading.Thread(target=dataGetter)
