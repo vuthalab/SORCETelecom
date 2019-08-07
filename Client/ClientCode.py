@@ -25,13 +25,13 @@ def dataGetter():
 
         connected = True
         try:
-            log = open("NewDataAugust2nd.txt","a+")
+            log = open("August7th.txt","a+")
         except:
             print("Already Opened")
         try:
             val = (d.recv(1024)).decode()
             if val != "":
-                log.write(val + "\n")
+                log.write(val)
         except:
             print("Exception")
             connected = False
