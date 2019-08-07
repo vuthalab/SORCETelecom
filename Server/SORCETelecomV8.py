@@ -1,319 +1,817 @@
 import socket
 import sys
-#import Imports.DualBME280s as DualBME280s
 import datetime
 import time
 import threading
-#from Imports.UFC6000 import FrequencyCounter
-#from Imports.koheron_control import *
-#from Imports.arduino_lock_cmd_dual_output import *
-#from Imports.arduino_lock_cmd import *
+import struct 
 
 
-### Initialization of Koherons and Arduinos
-#time.sleep(0.5)
-#frequency_counter = FrequencyCounter(address="/dev/FREQCOUNT")
-#frequency_counter.set_sample_time(1)
+###Trying to import functions from different sensors and apparatuses
 
-#kc1 = KoheronController("/dev/Koheron1")
-#kc2 = KoheronController("/dev/Koheron2")
-
-#ard1 = ArduinoCurrentLocker("/dev/Arduino1")
-#ard2 = ArduinoCurrentLocker("/dev/Arduino2")
+# Importing the Temperature, Humidity adn Pressure Sensors
+try:
+    import Imports.DualBME280s as DualBME280s
+except:
+    print("DualBME280s cannot be imported")
 
 
-DataLog = open("DataLog.txt","a+")
-DataLog.close()
+
+# Importing the Frequency Counter
+try:
+    from Imports.UFC6000 import FrequencyCounter
+except:
+    print("UFC6000 could not be imported")   
+
+# Importing the Koheron Controllers    
+try:
+    from Imports.koheron_control import *
+except:
+    print("Koheron could not be imported")
+
+# Importing the Arduino's
+try:
+    from Imports.arduino_lock_cmd_dual_output import *
+except:
+    print("Could not import Arduino Lock CMD Dual Output")
+try:   
+   from Imports.arduino_lock_cmd import *
+except:
+    print("Could not import Arduino Lock CMD")
 
 
-### Initializing the frequency counter
+### Block for Initializing sensors and apparatuses
+time.sleep(0.5)
+
+# Trying to initialize the Frequency Counter
+try:
+    frequency_counter = FrequencyCounter(address="/dev/FREQCOUNT")
+    frequency_counter.set_sample_time(1)
+except:
+    print("Could not initialize the Frequency counter")
+
+# Trying to initialize the Koherons
+try:
+    kc1 = KoheronController("/dev/Koheron1")
+except:
+    print("Could not initialize Koheron 1")
+try:
+    kc2 = KoheronController("/dev/Koheron2")
+except:
+    print("Could not initialize Koheron 2")
+
+
+# Trying to initialize the Arduinos:
+try:
+    ard1 = ArduinoCurrentLocker("/dev/Arduino1")
+except:
+    print("Could not initialize Arduino 1")
+try:
+    ard2 = ArduinoCurrentLocker("/dev/Arduino2")
+except:
+    print("Could not initialize Arduino 2")
+
+
+# Opening the DataLog
+try:
+    DataLog = open("DataLog.txt","a+")
+    DataLog.close()
+except:
+    DataLog = open("DataLog.txt","a+")
+    DataLog.close()
+
+try:
+    log = open("logs.txt","a+")
+    log.write("---------------------------------------------------------------------------------------------------------------\n")
+except: 
+    log = open("logs.txt","a+")
+    log.write("---------------------------------------------------------------------------------------------------------------\n")
+              
+### Error Function
+def error(message):
+    try:
+        log.write("Time: " + str(datetime.datetime.now()) + " ERROR: " + message + "\n")
+        suffix = ""
+    except:
+        suffix = "Can not write to log"
+    return "ERROR: " + message + " " + suffix + "\n"
+
+
+### Function to get the Frequency Counter Readings
 def freqCounter():
-    return (frequency_counter.get_frequency_and_range())
+    try:
+        rval = frequency_counter.get_frequency_and_range()
+        if (rval[0]).casefold() == ("Signal").casefold() or (rval[1]).casefold() == ("Signal").casefold():
+            rval = [0,0]
+    except:
+        rval = [0,0]
+      
+    return rval
+
+
     
 ### Function for associating a query to a given function and creating + sending the message
 def associate(Data,conn):
     message = ""
-    if Data[0:4] == "Ping":
-       message = "pong"
+    if (Data[0:4]).casefold() == ("Ping").casefold():
+       message = "Pong"
        
-       
-    elif Data[0:5] == "Temp?":
-       temp = DualBME280s.temp()
-       message = "Temperature: " + str(temp[0]) + ", " + str(temp[1]) 
+    elif (Data[0:5]).casefold() == ("Temp?").casefold():
+       try:
+           temp = DualBME280s.temp()
+           if temp[0] == 999: # Default output if a problem occurs 
+               message = error("BME280A could not give the temperature")
+           if temp[1] == 999: # Default output if a problem occurs 
+               message += error("BME280B could not give the temperature")
+           message += "Temperature: " + str(temp[0]) + ", " + str(temp[1])
+       except:
+           message = error("Could not connect to the BME280s")
 
-    elif Data[0:4] == "Alt?":
+
+    #TO-DO Need to add in the altitude reading from the Gondola
+    elif (Data[0:4]).casefold() == ("Alt?").casefold():
         message = "Altitude is of Z"
 
-    elif Data[0:6] == "Humid?":
-       humid = DualBME280s.humidity()
-       message = "Humidity: " + str(humid[0]) + ", " + str(humid[1])
+    elif (Data[0:6]).casefold() == ("Humid?").casefold():
+       try:
+           humid = DualBME280s.humidity()
+           if humid[0] == -1: #Default output if a problem occurs
+               message = error("BME280A could not give the humidity")
+           if humid[1] == -1: # Default output if a problem occurs 
+               message += error("BME280B could not give the humidity")
+           message += "Humidity: " + str(humid[0]) + ", " + str(humid[1])
+       except:
+           message = error("Could not connect to the BME280s")
     
-    elif Data[0:9] == "Pressure?":
-        pressure = DualBME280s.pressure()
-        message = "Pressure: " + str(pressure[0]) + ", " + str(pressure[1]) 
+    elif (Data[0:9]).casefold() == ("Pressure?").casefold():
+        try:
+            pressure = DualBME280s.pressure()
+            if pressure[0] == -1:
+                message = error("BME280A could not give the pressure")
+            if pressure[1] == -1:
+                message += error("BME280B could not give the pressure")
+            message += "Pressure: " + str(pressure[0]) + ", " + str(pressure[1])
+        except:
+            message = error("Could not connect to the BME280s")
 
-    elif Data[0:4] == "Loc?":
+    #TO-DO: Optional, may or may not add this coordinate feature depending on the data received and if it is feasible NOT A PRIORITY AND CAN BE DEPRICATED
+    elif (Data[0:4]).casefold() == ("Loc?").casefold():
         message = "X: XPLACEHOLDER" + " " + "Y: YPLACEHOLDER" + " " + "Z: ZPLACEGOLDER"
             
-    elif Data[0:10] == "Frequency?":
+    elif (Data[0:10]).casefold() == ("Frequency?").casefold():
         freq = freqCounter() 
-        message = "Frequency is of: " + str(freq[1]) + " MHz"
+        if freq == [0,0]:
+            message = error("Frequency Counter could not give Frequency and Range, defaulted at 0") # Not throwing an error, since the FreqCounter is already doing so, only adding a message for the user to read
+        message += "Frequency is of: " + str(freq[1]) + " MHz"
             
-    elif Data[0:3] == "ard":
-        if Data[3] == "1":
-            if Data[4:21] == ".default_params()":
-                ard1.default_params()
-                message = "Default Params have been set"
-            elif Data[4:10] == ".idn()":
-                message = ard1.idn()
-            elif Data[4:23] == ".load_from_eeprom()":
-                ard1.load_from_eeprom()
-                message = "Loaded from EEPROM"
-            elif Data[4:] == ".save_to_eeprom()":
-                ard1.save_to_eeprom()
-                message = "Saved to EEPROM"
-            elif Data[4:] == ".get_params()":
-                message = str(ard1.get_params())
-            elif Data[4:] == ".set_params()":
-                message = ard1.set_params()
-            elif Data[4:20] == ".set_scan_state(":
-                state = Data[20:len(Data)-1]
-                ard1.set_scan_state(state)
-                message = "State has been set"
-            elif Data[4:] == ".get_data()":
-                message = str(ard1.get_data())
-            elif Data[4:] == ".get_sampling_rate()":
-                message = ard1.get_sampling_rate()
-            elif Data[4:] == ".close()":
-                ard1.close()
-                message = "Closed"
-            elif Data[4:] == ".print_params()":
-                message = ard1.print_params()
-            elif Data[4:14] == ".scan_amp(":
-                amp = Data[14:len(Data)-1]
-                ard1.scan_amp(float(amp))
-                message = "Scan Amp has been set"
-            elif Data[4:] == ".lock()":
-                ard1.lock()
-                message = "Locked"
-            elif Data[4:] == ".unlock()":
-                ard1.unlock()
-                message = "Unlocked"
-            elif Data[4:12] == ".gain_p(":
-                pgain = Data[12:len(Data)-1]
-                ard1.gain_p(float(pgain))
-                message = "P gain set"
-            elif Data[4:12] == ".gain_i(":
-                igain = Data[12:len(Data)-1]
-                ard1.gain_i(float(igain))
-                message = "I gain set"
-            elif Data[4:13] == ".gain_i2(":
-                i2gain = Data[13:len(Data)-1]
-                ard1.gain_i2(float(i2gain))
-                message = "i2 Gain set"
-            elif Data[4:19] == ".output_offset(":
-                offset = Data[19:len(Data)-1]
-                ard1.output_offset(float(offset))
-                message = "Offset has been set"
-            elif Data[4:] == ".increase_offset()":
-                ard1.increase_offset()
-                message = "Offset sucessfully Increased"
-            elif Data[4:] == ".decrease_offset()":
-                ard1.dectrase_offset()
-                message = "Offset sucessfully Decreased"
-            elif Data[4:10] == ".fwhm(":
-                fwhm = Data[10:len(Data)-1]
-                ard1.fwhm(float(fwhm))
-                message = "FWHM set"
-            elif Data[4:16] ==  ".n_averages(":
-                n = Data[16:len(Data)-1]
-                ard1.n_averages(int(n))
-                message = "N Averages set"
-            elif Data[4:14] == ".low_pass(":
-                lp = Data[14:len(Data)-1]
-                message = ard1.low_pass(int(lp))
-                
-        elif Data[3] == "2":
-            if Data[4:21] == ".default_params()":
-                ard2.default_params()
-                message = "Default Params have been set"
-            elif Data[4:10] == ".idn()":
-                message = ard2.idn()
-            elif Data[4:23] == ".load_from_eeprom()":
-                ard2.load_from_eeprom()
-                message = "Loaded from EEPROM"
-            elif Data[4:] == ".save_to_eeprom()":
-                ard2.save_to_eeprom()
-                message = "Saved to EEPROM"
-            elif Data[4:] == ".get_params()":
-                message = str(ard2.get_params())
-            elif Data[4:] == ".set_params()":
-                message = ard2.set_params()
-            elif Data[4:20] == ".set_scan_state(":
-                state = Data[20:len(Data)-1]
-                ard2.set_scan_state(state)
-                message = "State has been set"
-            elif Data[4:] == ".get_data()":
-                message = str(ard2.get_data())
-            elif Data[4:] == ".get_sampling_rate()":
-                message = ard2.get_sampling_rate()
-            elif Data[4:] == ".close()":
-                ard2.close()
-                message = "Closed"
-            elif Data[4:] == ".print_params()":
-                message = ard2.print_params()
-            elif Data[4:14] == ".scan_amp(":
-                amp = Data[14:len(Data)-1]
-                ard2.scan_amp(float(amp))
-                message = "Scan Amp has been set"
-            elif Data[4:] == ".lock()":
-                ard2.lock()
-                message = "Locked"
-            elif Data[4:] == ".unlock()":
-                ard2.unlock()
-                message = "Unlocked"
-            elif Data[4:12] == ".gain_p(":
-                pgain = Data[12:len(Data)-1]
-                ard2.gain_p(float(pgain))
-                message = "P gain set"
-            elif Data[4:12] == ".gain_i(":
-                igain = Data[12:len(Data)-1]
-                ard2.gain_i(float(igain))
-                message = "I gain set"
-            elif Data[4:13] == ".gain_i2(":
-                i2gain = Data[13:len(Data)-1]
-                ard2.gain_i2(float(i2gain))
-                message = "i2 Gain set"
-            elif Data[4:19] == ".output_offset(":
-                offset = Data[19:len(Data)-1]
-                ard2.output_offset(float(offset))
-                message = "Offset has been set"
-            elif Data[4:] == ".increase_offset()":
-                ard2.increase_offset()
-                message = "Offset sucessfully Increased"
-            elif Data[4:] == ".decrease_offset()":
-                ard2.dectrase_offset()
-                message = "Offset sucessfully Decreased"
-            elif Data[4:10] == ".fwhm(":
-                fwhm = Data[10:len(Data)-1]
-                ard2.fwhm(float(fwhm))
-                message = "FWHM set"
-            elif Data[4:16] ==  ".n_averages(":
-                n = Data[16:len(Data)-1]
-                ard2.n_averages(int(n))
-                message = "N Averages set"
-            elif Data[4:14] == ".low_pass(":
-                lp = Data[14:len(Data)-1]
-                message = ard2.low_pass(int(lp))
+    elif (Data[0:3]).casefold() == ("ard").casefold():
+        if (Data[3]).casefold() == ("1").casefold():
+            if (Data[4:21]).casefold() == (".default_params()").casefold():
+                try:
+                    ard1.default_params()
+                    message = "Default Params have been set for Arduino 1"
+                except:
+                     message = error("Could not set Default Params for Arduino 1")                
             
+            elif (Data[4:10]).casefold() == (".idn()").casefold():
+                try:
+                    idNum = ard1.idn
+                    message = "Arduino 1's ID Number is: " + str(idNum)
+                except:
+                    message = error("Could not get the ID number from Arduino 1")
+                        
+
+            elif (Data[4:23]).casefold() == (".load_from_eeprom()").casefold():
+                try:
+                    ard1.load_from_eeprom()
+                    message += "Arduino 1 Loaded from EEPROM"
+                except:
+                    message = error("Could not load from EEPROM for Arduino 1")
+
+               
+            elif (Data[4:]).casefold() == (".save_to_eeprom()").casefold():
+                try:
+                    ard1.save_to_eeprom()
+                    message = "Arduinon 1's settings Saved to EEPROM"
+                except:
+                    message = error("Could not Save Arduino 1's settings to EEPROM")
                 
-    elif Data[0:2] == "kc":
-        if Data[2] == "1":
-            if Data[3:10] == ".write(":
-                command = Data[10:len(Data)-1]
-                kc1.write(command)
-                message = "Command has been written"
-            elif Data[3:8] == ".ask(":
-                command = Data[8:len(Data)-1]
-                message = "Response: " +str(kc1.ask(command))
-            elif Data[3:9] == ".close":
-                kc1.close()
-                message = "Closed"
-            elif Data[3:13] == ".set_temp(":
-                temp = float(Data[13:len(Data)-1])
-                kc1.set_temp(temp)
-                message = "Temperature has been set to: " + str(temp)
-            elif Data[3:17] == ".read_set_temp":
-                message = "Set Temperature: " + str(kc1.read_set_temp())
-            elif Data[3:13] == ".read_temp":
-                message = "Temperature is:" + str(kc1.read_temp())
-            elif Data[3:16] == ".set_current(":
-                curr = float(Data[16:len (Data)-1])
-                kc1.set_current(curr)
-                message = "Current has been set to: " + str(curr)
-            elif Data[3:12] == ".laser_on":
-                kc1.laser_on()
-                message = "Laser has been turned On"
-            elif Data[3:13] == ".laser_off":
-                kc1.laser_off()
-                message = "Laser has been turned off"
-            elif Data[3:16] == ".read_current":
-                message = "Current is of: " + str(kc1.read_current())
-            elif Data[3:21] == ".increase_current(":
-                adj = float(Data[21:len(Data)-1])
-                kc1.increase_current(adj)
-                message = "Current has been increased to: " + str(adj)
-            elif Data[3:21] == ".decrease_current(":
-                adj = float(Data[21:len(Data)-1])
-                kc1.decrease_current(adj)
-                message = "Current has been decreased to: " + str(adj)
-            elif Data[3:13] == ".get_temp(":
-                res = float(Data[13:len(Data)-1])
-                message = " Temperature is of " + str(kc1.get_temp(res))
-            elif Data[3:19] == ".get_resistance(":
-                temp = float(Data[19:len(Data)-1])
-                message = "The resistance is of: "+ str(kc1.get_resistance(temp))
-            elif Data[3:] == ".stream_data()":
-                temp = get_temp(float(kc1.ask('rtact')))
-                curr = float(kc1.ask('ilaser'))
-                if(float(kc1.ask('lason'))==1):
-                    onoff = 'On'
-                else:
-                    onoff = 'Off'
-                message = "Temperature: " + str(temp) + " C   Laser: " + onoff + "   Current: " + str(curr) + " mA"
-        elif Data[2] == "2":
-            if Data[3:10] == ".write(":
-                command = Data[10:len(Data)-1]
-                kc2.write(command)
-                message = "Command has been written"
-            elif Data[3:8] == ".ask(":
-                command = Data[8:len(Data)-1]
-                message = "Response: " +str(kc2.ask(command))
-            elif Data[3:9] == ".close":
-                kc2.close()
-                message = "Closed"
-            elif Data[3:13] == ".set_temp(":
-                temp = float(Data[12:len(Data)-1])
-                kc2.set_temp(temp)
-                message = "Temperature has been set to: " + str(temp)
-            elif Data[3:17] == ".read_set_temp":
-                message = "Set Temperature: " + str(kc2.read_set_temp())
-            elif Data[3:13] == ".read_temp":
-                message = "Temperature is:" + str(kc2.read_temp())
-            elif Data[3:16] == ".set_current(":
-                curr = float(Data[16:len (Data)-1])
-                kc2.set_current(curr)
-                message = "Current has been set to: " + str(curr)
-            elif Data[3:12] == ".laser_on":
-                kc2.laser_on()
-                message = "Laser has been turned On"
-            elif Data[3:13] == ".laser_off":
-                kc2.laser_off()
-                message = "Laser has been turned off"
-            elif Data[3:16] == ".read_current":
-                message = "Current is of: " + str(kc2.read_current())
-            elif Data[3:21] == ".increase_current(":
-                adj = float(Data[21:len(Data)-1])
-                kc2.increase_current(adj)
-                message = "Current has been increased to: " + str(adj)
-            elif Data[3:21] == ".decrease_current(":
-                adj = float(Data[21:len(Data)-1])
-                kc2.decrease_current(adj)
-                message = "Current has been decreased to: " + str(adj)
-            elif Data[3:13] == ".get_temp(":
-                res = float(Data[13:len(Data)-1])
-                message = " Temperature is of " + str(kc2.get_temp(res))
-            elif Data[3:19] == ".get_resistance(":
-                temp = float(Data[19:len(Data)-1])
-                message = "The resistance is of: "+ str(kc2.get_resistance(temp))
-            elif Data[3:] == ".stream_data()":
-                temp = get_temp(float(kc2.ask('rtact')))
-                curr = float(kc2.ask('ilaser'))
-                if(float(kc2.ask('lason'))==1):
-                    onoff = 'On'
-                else:
-                    onoff = 'Off'
-                message = "Temperature: " + str(temp) + " C   Laser: " + onoff + "   Current: " + str(curr) + " mA"
+            elif (Data[4:]).casefold() == (".get_params()").casefold():
+                try:
+                    params = ard1.get_params()
+                    message = "Params are" + str(params)
+                except:
+                    message = error("Could not get Params of Arduino 1")
+
+            elif (Data[4:]).casefold() == (".set_params()").casefold():
+                try:
+                    rval = ard1.set_params()
+                    message = rval
+                except:
+                    message = error("Could not set the Params of Arduino 1")
+
+            elif (Data[4:20]).casefold() == (".set_scan_state(").casefold():
+                try:
+                    state = Data[20:len(Data)-1]
+                    ard1.set_scan_state(state)
+                    message = "Scan State of Arduino 1 has been set to " + str(state)
+                except:
+                    message = error("Could not set Scan State of Arduino 1")
+
+            elif (Data[4:]).casefold() == (".get_data()").casefold():
+                try:
+                    data = ard1.get_data()
+                    message = "Arduino 1's Data is: " + str(data)
+                except:
+                    message = error("Could not get Arduino 1's Data")
+
+            elif (Data[4:]).casefold() == (".get_sampling_rate()").casefold():
+                try:
+                    samplingRate = ard1.get_sampling_rate()
+                    message = samplingRate
+                except:
+                    message = error("Could not get Arduino 1's sampling rate")
+
+            elif (Data[4:]).casefold() == (".close()").casefold():
+                try:
+                    ard1.close()
+                    message = "Arduino 1 has been closed"
+                except:
+                    message = error("Arduino 1 was not closed")
+
+            elif (Data[4:]).casefold() == (".print_params()").casefold():
+                try:
+                    params = ard1.print_params()
+                    message = "Arduino 1's Params are:\n" + params
+                except:
+                    message = error("Arduino 1's params could not be accessed")
+
+            elif (Data[4:14]).casefold() == (".scan_amp(").casefold():
+                try:
+                    amp = Data[14:len(Data)-1]
+                    flAmp = float(amp)
+                    ard1.scan_amp(flAmp)
+                    message = "Scan Amp has been set"
+                except ValueError as e:
+                    message = error("No float Value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set the Scan Amplitude of Arduino 1")
+                    
+            elif (Data[4:]).casefold() == (".lock()").casefold():
+                try:
+                    ard1.lock()
+                    message = "Arduino 1 has been Locked"
+                except:
+                    message = error("Arduino 1 could not be locked")
+
+            elif (Data[4:]).casefold() == (".unlock()").casefold():
+                try:
+                    ard1.unlock()
+                    message = "Arduino 1 has been Unlocked"
+                except:
+                    message = error("Arduino 1 could not be unlocked")
+
+            elif (Data[4:12]).casefold() == (".gain_p(").casefold():
+                try:
+                    pgain = Data[12:len(Data)-1]
+                    flPgain = float(pgain)
+                    message = ard1.gain_p(flPgain)
+                except ValueError as e:
+                    message = error("No Float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set pgain of Arduino 1")
+
+
+            elif (Data[4:12]).casefold() == (".gain_i(").casefold():
+                try:
+                    igain = Data[12:len(Data)-1]
+                    flIgain = float(igain)
+                    message = ard1.gain_i(flIgain)
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set igain of Arduino 1")
+
+            elif (Data[4:13]).casefold() == (".gain_i2(").casefold():
+                try:
+                    i2gain = Data[13:len(Data)-1]
+                    flI2gain = float(i2gain)
+                    message =  ard1.gain_i2(flI2gain)
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set i2gain of Arduino 1")
+
+
+            elif (Data[4:19]).casefold() == (".output_offset(").casefold():
+                try:
+                    offset = Data[19:len(Data)-1]
+                    flOffset = float(offset)
+                    ard1.output_offset(flOffset)
+                    message = "Arduino 1's Offset has been set"
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set offset of Arduino 1")
+
+            elif (Data[4:]).casefold() == (".increase_offset()").casefold():
+                try:
+                    ard1.increase_offset()
+                    message = "Arduino 1's Offset has sucessfully been Increased"
+                except:
+                    message = error("Arduino 1's Offset has failed to increase")
+
+            elif (Data[4:]).casefold() == (".decrease_offset()").casefold():
+                try:
+                    ard1.dectrase_offset()
+                    message = "Arduino 1's offset has sucessfully beenDecreased"
+                except:
+                    message = error("Arduino 1's offset has failed to decrease")
+
+            elif (Data[4:10]).casefold() == (".fwhm(").casefold():
+                try:
+                    fwhm = Data[10:len(Data)-1]
+                    flFwhm = float(fwhm)
+                    ard1.fwhm(flFwhm)
+                    message = "Arduino 1's FWHM has been set"
+                except:
+                    message = error("Could not set Arduino 1's FWHM")
+
+            elif (Data[4:16]).casefold() ==  (".n_averages(").casefold():
+                try:
+                    n = Data[16:len(Data)-1]
+                    flN = float(n)
+                    ard1.n_averages(flN)
+                    message = "Arduino 1's N Averages has been set"
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set Arduino 1's N_averages")
+
+            elif (Data[4:14]).casefold() == (".low_pass(").casefold():
+                try:
+                    lp = Data[14:len(Data)-1]
+                    inLp = float(lp)
+                    message = ard1.low_pass(inLp)
+                except ValueError as e:
+                    message = error("No int value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not set Arduino 1's Low Pass Cutoff")
+
+                
+        elif (Data[3]).casefold() == ("2").casefold():
+            if (Data[4:21]).casefold() == (".default_params()").casefold():
+                try:
+                    ard2.default_params()
+                    message = "Default Params have been set for Arduino 2"
+                except:
+                     message = error("Could not set Default Params for Arduino 2")                
+            
+            elif (Data[4:10]).casefold() == (".idn()").casefold():
+                try:
+                    idNum = ard2.idn
+                    message = "Arduino 2's ID Number is: " + str(idNum)
+                except:
+                    message = error("Could not get the ID number from Arduino 2")
+                        
+
+            elif (Data[4:23]).casefold() == (".load_from_eeprom()").casefold():
+                try:
+                    ard2.load_from_eeprom()
+                    message += "Arduino 2 Loaded from EEPROM"
+                except:
+                    message = error("Could not load from EEPROM for Arduino 2")
+
+               
+            elif (Data[4:]).casefold() == (".save_to_eeprom()").casefold():
+                try:
+                    ard2.save_to_eeprom()
+                    message = "Arduinon 2's settings Saved to EEPROM"
+                except:
+                    message = error("Could not Save Arduino 2's settings to EEPROM")
+                
+            elif (Data[4:]).casefold() == (".get_params()").casefold():
+                try:
+                    params = ard2.get_params()
+                    message = "Params are" + str(params)
+                except:
+                    message = error("Could not get Params of Arduino 2")
+
+            elif (Data[4:]).casefold() == (".set_params()").casefold():
+                try:
+                    rval = ard2.set_params()
+                    message = rval
+                except:
+                    message = error("Could not set the Params of Arduino 2")
+
+            elif (Data[4:20]).casefold() == (".set_scan_state(").casefold():
+                try:
+                    state = Data[20:len(Data)-1]
+                    ard2.set_scan_state(state)
+                    message = "Scan State of Arduino 2 has been set to " + str(state)
+                except:
+                    message = error("Could not set Scan State of Arduino 2")
+
+            elif (Data[4:]).casefold() == (".get_data()").casefold():
+                try:
+                    data = ard2.get_data()
+                    message = "Arduino 2's Data is: " + str(data)
+                except:
+                    message = error("Could not get Arduino 2's Data")
+
+            elif (Data[4:]).casefold() == (".get_sampling_rate()").casefold():
+                try:
+                    samplingRate = ard2.get_sampling_rate()
+                    message = samplingRate
+                except:
+                    message = error("Could not get Arduino 2's sampling rate")
+
+            elif (Data[4:]).casefold() == (".close()").casefold():
+                try:
+                    ard2.close()
+                    message = "Arduino 2 has been closed"
+                except:
+                    message = error("Arduino 2 was not closed")
+
+            elif (Data[4:]).casefold() == (".print_params()").casefold():
+                try:
+                    params = ard2.print_params()
+                    message = "Arduino 2's Params are:\n" + params
+                except:
+                    message = error("Arduino 2's params could not be accessed")
+
+            elif (Data[4:14]).casefold() == (".scan_amp(").casefold():
+                try:
+                    amp = Data[14:len(Data)-1]
+                    flAmp = float(amp)
+                    ard2.scan_amp(flAmp)
+                    message = "Scan Amp has been set"
+                except ValueError as e:
+                    message = error("No float Value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set the Scan Amplitude of Arduino 2")
+                    
+            elif (Data[4:]).casefold() == (".lock()").casefold():
+                try:
+                    ard2.lock()
+                    message = "Arduino 2 has been Locked"
+                except:
+                    message = error("Arduino 2 could not be locked")
+
+            elif (Data[4:]).casefold() == (".unlock()").casefold():
+                try:
+                    ard2.unlock()
+                    message = "Arduino 2 has been Unlocked"
+                except:
+                    message = error("Arduino 2 could not be unlocked")
+
+            elif (Data[4:12]).casefold() == (".gain_p(").casefold():
+                try:
+                    pgain = Data[12:len(Data)-1]
+                    flPgain = float(pgain)
+                    message = ard2.gain_p(flPgain)
+                except ValueError as e:
+                    message = error("No Float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set pgain of Arduino 2")
+
+
+            elif (Data[4:12]).casefold() == (".gain_i(").casefold():
+                try:
+                    igain = Data[12:len(Data)-1]
+                    flIgain = float(igain)
+                    message = ard2.gain_i(flIgain)
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set igain of Arduino 2")
+
+            elif (Data[4:13]).casefold() == (".gain_i2(").casefold():
+                try:
+                    i2gain = Data[13:len(Data)-1]
+                    flI2gain = float(i2gain)
+                    message =  ard2.gain_i2(flI2gain)
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set i2gain of Arduino 2")
+
+
+            elif (Data[4:19]).casefold() == (".output_offset(").casefold():
+                try:
+                    offset = Data[19:len(Data)-1]
+                    flOffset = float(offset)
+                    ard2.output_offset(flOffset)
+                    message = "Arduino 2's Offset has been set"
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set offset of Arduino 2")
+
+            elif (Data[4:]).casefold() == (".increase_offset()").casefold():
+                try:
+                    ard2.increase_offset()
+                    message = "Arduino 2's Offset has sucessfully been Increased"
+                except:
+                    message = error("Arduino 2's Offset has failed to increase")
+
+            elif (Data[4:]).casefold() == (".decrease_offset()").casefold():
+                try:
+                    ard2.dectrase_offset()
+                    message = "Arduino 2's offset has sucessfully beenDecreased"
+                except:
+                    message = error("Arduino 2's offset has failed to decrease")
+
+            elif (Data[4:10]).casefold() == (".fwhm(").casefold():
+                try:
+                    fwhm = Data[10:len(Data)-1]
+                    flFwhm = float(fwhm)
+                    ard2.fwhm(flFwhm)
+                    message = "Arduino 2's FWHM has been set"
+                except:
+                    message = error("Could not set Arduino 2's FWHM")
+
+            elif (Data[4:16]).casefold() ==  (".n_averages(").casefold():
+                try:
+                    n = Data[16:len(Data)-1]
+                    flN = float(n)
+                    ard2.n_averages(flN)
+                    message = "Arduino 2's N Averages has been set"
+                except ValueError as e:
+                    message = error("No float value detected in function call: " + str(e))
+                except:
+                    message = error("Could not set Arduino 2's N_averages")
+
+            elif (Data[4:14]).casefold() == (".low_pass(").casefold():
+                try:
+                    lp = Data[14:len(Data)-1]
+                    inLp = float(lp)
+                    message = ard2.low_pass(inLp)
+                except ValueError as e:
+                    message = error("No int value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not set Arduino 2's Low Pass Cutoff")
+            
+    elif (Data[0:9]).casefold() == ("get_temp(").casefold():
+                try:
+                    res = Data[9:len(Data)-1]
+                    flRes = float(res)
+                    temp = get_temp(flRes)
+                    strTemp = str(temp)
+                    message = "Temperature is of " + strTemp
+                except:
+                    message = error("Could not get the Temperature")
+
+
+    elif (Data[0:15]).casefold() == ("get_resistance(").casefold():
+                try:
+                    temp = Data[15:len(Data)-1]
+                    flTemp = float(temp)
+                    res = get_resistance(temp)
+                    strRes = str(res)
+                    message = "The resistance is of: "+ strRes
+                except:
+                    message = error("Could not get the Resistance")   
+                    
+    elif (Data[0:2]).casefold() == ("kc").casefold():
+        if (Data[2]).casefold() == ("1").casefold():
+            if (Data[3:10]).casefold() == (".write(").casefold():
+                try:
+                    command = Data[10:len(Data)-1]
+                    kc1.write(command)
+                    message = "Koheron 1 wrote: " + command
+                except:
+                    message = error("Koheron 1 could not write the command")
+
+            elif (Data[3:8]).casefold() == (".ask(").casefold():
+                try:
+                    command = Data[8:len(Data)-1]
+                    message = "Response: " + str(kc1.ask(command))
+                except:
+                    message = error("Koheron 1 could not ask the query")
+
+            elif (Data[3:9]).casefold() == (".close").casefold():
+                try:
+                    kc1.close()
+                    message = "Koheron 1 has been Closed"
+                except:
+                    message = error("Could not close Koheron 1")
+
+            elif (Data[3:13]).casefold() == (".set_temp(").casefold():
+                try:
+                    temp = Data[13:len(Data)-1]
+                    flTemp = float(temp)
+                    kc1.set_temp(flTemp)
+                    message = "Temperature has been set to: " + temp
+                except ValueError as e:
+                    message = error("No float value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not Set the Temperature of Koheron 1")
+
+            elif (Data[3:17]).casefold() == (".read_set_temp").casefold():
+                try:
+                    temp = str(kc1.read_set_temp())
+                    message = "Koheron 1's set Temperature is: " + temp
+                except:
+                    message = error("Could not read Koheron 1's Set Temp")
+
+            elif (Data[3:13]).casefold() == (".read_temp").casefold():
+                try:
+                    temp = kc1.read_temp()
+                    strTemp = str(temp)
+                    message = "Temperature is:" + strTemp
+                except:
+                    message = error("Could not Read the Temperature of Koheron 1")
+
+            elif (Data[3:16]).casefold() == (".set_current(").casefold():
+                try:
+                    curr = Data[16:len (Data)-1]
+                    fltCurr = float(curr)
+                    kc1.set_current(fltCurr) 
+                    message = "Koheron 1's current has been set to: " + curr
+                except ValueError as e:
+                    message = error("No float value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not set the Current of Koheron 1")
+
+
+            elif (Data[3:12]).casefold() == (".laser_on").casefold():
+                try:
+                    kc1.laser_on()
+                    message = "Koheron 1's Laser has been turned On"
+                except:
+                    message = error("Could not turn on Koheron 1's Laser")
+
+            elif (Data[3:13]).casefold() == (".laser_off").casefold():
+                try:
+                    kc1.laser_off()
+                    message = "Koheron 1's Laser has been turned off"
+                except:
+                    message = error("Could not turn off Koheron 1's Laser")
+
+            elif (Data[3:16]).casefold() == (".read_current").casefold():
+                try:
+                    curr = kc1.read_current()
+                    strCurr = str(curr)
+                    message = "Koheron 1's Current is of: " + strCurr
+                except:
+                    message = error("Could not read Koheron 1's current")
+
+            elif (Data[3:21]).casefold() == (".increase_current(").casefold():
+                try:
+                    adj = Data[21:len(Data)-1]
+                    flAdj = float(adj)
+                    kc1.increase_current(flAdj)
+                    message = "Koheron 1's Current has been increased to: " + adj
+                except:
+                    message = error("Could not increase Koheron 1's current")
+
+            elif (Data[3:21]).casefold() == (".decrease_current(").casefold():
+                try:
+                    adj = Data[21:len(Data)-1]
+                    flAdj = float(adj)
+                    kc1.decrease_current(flAdj)
+                    message = "Koheron 1's Current has been decreased to: " + adj
+                except:
+                    message = error("Could not decrease Koheron 1's current")
+
+            
+            elif (Data[3:]).casefold() == (".stream_data()").casefold():
+                try:
+                    val = kc1.ask('rtact')
+                    flVal = float(val)
+                    temp = get_temp(flVal)
+
+                    curr = kc1.ask('ilaser')
+                    flCurr = float(curr)
+                    if(float(kc1.ask('lason'))==1):
+                        onoff = 'On'
+                    else:
+                        onoff = 'Off'
+                    message = "Temperature: " + str(temp) + " C   Laser: " + onoff + "   Current: " + curr + " mA"
+                except ValueError as e:
+                    message = error("Parsing Error: " + str(e))
+                except:
+                    message = error("Could not stream Data from Koheron 1")
+
+        elif (Data[2]).casefold() == ("2").casefold():
+            if (Data[3:10]).casefold() == (".write(").casefold():
+                try:
+                    command = Data[10:len(Data)-1]
+                    kc2.write(command)
+                    message = "Koheron 2 wrote: " + command
+                except:
+                    message = error("Koheron 2 could not write the command")
+
+            elif (Data[3:8]).casefold() == (".ask(").casefold():
+                try:
+                    command = Data[8:len(Data)-1]
+                    message = "Response: " + str(kc2.ask(command))
+                except:
+                    message = error("Koheron 2 could not ask the query")
+
+            elif (Data[3:9]).casefold() == (".close").casefold():
+                try:
+                    kc2.close()
+                    message = "Koheron 2 has been Closed"
+                except:
+                    message = error("Could not close Koheron 2")
+
+            elif (Data[3:13]).casefold() == (".set_temp(").casefold():
+                try:
+                    temp = Data[13:len(Data)-1]
+                    flTemp = float(temp)
+                    kc2.set_temp(flTemp)
+                    message = "Temperature has been set to: " + temp
+                except ValueError as e:
+                    message = error("No float value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not Set the Temperature of Koheron 2")
+
+            elif (Data[3:17]).casefold() == (".read_set_temp").casefold():
+                try:
+                    temp = str(kc2.read_set_temp())
+                    message = "Koheron 2's set Temperature is: " + temp
+                except:
+                    message = error("Could not read Koheron 2's Set Temp")
+
+            elif (Data[3:13]).casefold() == (".read_temp").casefold():
+                try:
+                    temp = kc2.read_temp()
+                    strTemp = str(temp)
+                    message = "Temperature is:" + strTemp
+                except:
+                    message = error("Could not Read the Temperature of Koheron 2")
+
+            elif (Data[3:16]).casefold() == (".set_current(").casefold():
+                try:
+                    curr = Data[16:len (Data)-1]
+                    fltCurr = float(curr)
+                    kc2.set_current(fltCurr) 
+                    message = "Koheron 2's current has been set to: " + curr
+                except ValueError as e:
+                    message = error("No float value detected in the function call: " + str(e))
+                except:
+                    message = error("Could not set the Current of Koheron 2")
+
+
+            elif (Data[3:12]).casefold() == (".laser_on").casefold():
+                try:
+                    kc2.laser_on()
+                    message = "Koheron 2's Laser has been turned On"
+                except:
+                    message = error("Could not turn on Koheron 2's Laser")
+
+            elif (Data[3:13]).casefold() == (".laser_off").casefold():
+                try:
+                    kc2.laser_off()
+                    message = "Koheron 2's Laser has been turned off"
+                except:
+                    message = error("Could not turn off Koheron 2's Laser")
+
+            elif (Data[3:16]).casefold() == (".read_current").casefold():
+                try:
+                    curr = kc2.read_current()
+                    strCurr = str(curr)
+                    message = "Koheron 2's Current is of: " + strCurr
+                except:
+                    message = error("Could not read Koheron 2's current")
+
+            elif (Data[3:21]).casefold() == (".increase_current(").casefold():
+                try:
+                    adj = Data[21:len(Data)-1]
+                    flAdj = float(adj)
+                    kc2.increase_current(flAdj)
+                    message = "Koheron 2's Current has been increased to: " + adj
+                except:
+                    message = error("Could not increase Koheron 2's current")
+
+            elif (Data[3:21]).casefold() == (".decrease_current(").casefold():
+                try:
+                    adj = Data[21:len(Data)-1]
+                    flAdj = float(adj)
+                    kc2.decrease_current(flAdj)
+                    message = "Koheron 2's Current has been decreased to: " + adj
+                except:
+                    message = error("Could not decrease Koheron 2's current")
+
+            
+            elif (Data[3:]).casefold() == (".stream_data()").casefold():
+                try:
+                    val = kc2.ask('rtact')
+                    flVal = float(val)
+                    temp = get_temp(flVal)
+
+                    curr = kc2.ask('ilaser')
+                    flCurr = float(curr)
+                    if(float(kc2.ask('lason'))==1):
+                        onoff = 'On'
+                    else:
+                        onoff = 'Off'
+                    message = "Temperature: " + str(temp) + " C   Laser: " + onoff + "   Current: " + curr + " mA"
+                except ValueError as e:
+                    message = error("Parsing Error: " + str(e))
+                except:
+                    message = error("Could not stream Data from Koheron 2")
 
     if message == "":
         message = "Invalid Input"
@@ -337,16 +835,14 @@ def getArduinoUpdates():
             #print("Arduino2's update " + update2[0:len(update2)-1])
             ArduinoLog.close()
         except:
-            print("Err")
+            print("Error in getting updates from arduinos")
             try:
                 ArduinoLog.close()
             except:
                 print("Already closed")
             return True
         
-
-### Code that sends the stream of data constantly
-def run():
+def connect():
     while True:
         ### Data Connection
         DHOST = ""
@@ -372,19 +868,117 @@ def run():
         #Give the connection a second
         time.sleep(1)
 
+
+        try:
+            MCAST_GRP = '225.0.0.0'
+            MCAST_PORT = 4446
+            IS_ALL_GROUPS = False
+
+            mCastSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            mCastSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+            #on this port, listen ONLY to MCAST_GRP
+            mCastSocket.bind((MCAST_GRP, MCAST_PORT))
+
+            mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
+            mCastSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        except:
+            error("Could not connect to Multicast Group")
+
+        return [d,dConn]
+
+
+### Code that sends the stream of data constantly
+def run():
+    while True:
+        ### Data Connection
+
+        DHOST = ""
+        DPORT = 1329 ###Data Port
+        d = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        d.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        ##Tries to create the data connection to 1329, if it fails to 1330
+        try:
+            d.bind((DHOST,DPORT))
+        except:
+            d.bind((DHOST,DPORT+1))
+            
+        try:
+            # Opening the Data Connection
+            d.listen()
+            dConn, dAddr = d.accept()
+            print("Connection at",dAddr)
+        except:
+            print("Data not Connected")
+                
+        #Give the connection a second
+        time.sleep(1)
+
+
+        try:
+            MCAST_GRP = '225.0.0.0'
+            MCAST_PORT = 4446
+            IS_ALL_GROUPS = False
+
+            mCastSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+            mCastSocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+            #on this port, listen ONLY to MCAST_GRP
+            mCastSocket.bind((MCAST_GRP, MCAST_PORT))
+
+            mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
+            mCastSocket.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        except:
+            error("Could not connect to Multicast Group")
         ### Loop for the logged and sent data.
         ### Currently Logs: Temperature from both sensors, Frequency from the Frequency counter and the Local time.
         ### Needs to log time from RTC and Altitude of the Gondola (Waiting on CSA for that) 2019-08-02
-            # Sent them an email
+            # [X] Sent them an email
+            # [X] Received Example Code
+            # [X] Implementing Example Code
+            # [ ] Getting Jean-François to test the code
+
+
+        RTCTime = ""
+        altitude = "0"
         while True:
+            DataLog = open("DataLog.txt","a+")
+            message = ""
             try:
-                DataLog = open("DataLog.txt","a+")
-                #temp = DualBME280s.temp()
-                #freq = freqCounter()               
-                message = str(datetime.datetime.now())+"\t\n" #+ str(temp[0]) + "\t" + str(temp[1]) + "\t" + str(freq[1]) + "\n"
+                prismMSG = (mCastSocket.recv(1024)).decode()
+                prism_data = prismMSG.split(",")
+                if prism_data[3] == "POS0":
+                    RTCTime = str(prism_data[1])
+                    altitude = str(prism_data[6])
+                    #print(("Time: " + str(RTCTime) + "\tAltitude: " + altitude + "\n"), file=open("Prism_Time_and_Altitude_Data.txt", "a+"))
+            except:
+                RTCTime = str(datetime.datetime.now())
+                altitude= "0"
+            message = RTCTime + "\t" + altitude + "\t"
+            try:
+                temp = DualBME280s.temp()
+                if temp[0] != 999:
+                    message += str(temp[0])
+                message += "\t"
+                if temp[1] != 999:
+                    message += str(temp[1])
+                message += "\t"              
+            except:
+                message +="\t\t"
+
+            try:
+                freq = freqCounter()  
+                message += str(freq[1]) + "\t"
+            except:
+                message += "0\t"
+            message = message + "\n"
+
+            try:
                 DataLog.write(message)
-                dConn.sendto((message + "\r").encode(),dAddr)
                 DataLog.close()
+                dConn.sendto((message + "\r").encode(),dAddr)           
+               
             except:
                 print("Disconnected at", str(datetime.datetime.now()))
                 print("Failed")
@@ -394,7 +988,8 @@ def run():
                     d.shutdown(socket.SHUT_RDWR)
                 except:
                     d.close()
-                break
+                    
+                    break
         
         print("over")
     return True
@@ -420,9 +1015,7 @@ def main():
         try:
             s.bind((HOST,PORT))
         except:
-            s.bind((HOST,PORT+1))
-    
-        
+            s.bind((HOST,PORT+1))        
         Started = False
         
         
@@ -444,10 +1037,12 @@ def main():
 
 
                 ### Open the command/warning Log
-                log = open("logs.txt","a+")
-                log.write("---------------------------------------------------------------------------------------------------------------\n")
-                log.write("Time: " + str(datetime.datetime.now()) + " Connected: " + str(addr) + "\n")        
-              
+                try:
+                    log = open("logs.txt","a+")
+                    log.write("---------------------------------------------------------------------------------------------------------------\n")
+                    log.write("Time: " + str(datetime.datetime.now()) + " Connected: " + str(addr) + "\n")        
+                except:
+                    log.write("Log already opened!\n")
                 ### Data Thread Starting
                 try:
                     # Starts the data sending thread
