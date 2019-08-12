@@ -1,35 +1,50 @@
 import time
+import datetime
 import numpy as np
 import serial
+import os
 
-CURR_MAX = 90.0 #mA
-CURR_MIN = 65.0 #mA
+CURR_MAX = 250.0 #mA
+CURR_MIN = 10.0 #mA
 
+#os.chdir('/home/vuthalab/electric.atoms@gmail.com/Rb2Photon/data/intensity fluctuation test')
 
 class KoheronController:
     def __init__(self,portname):
         self.device = serial.Serial(portname,
                                     baudrate=115200,
                                     timeout=0.001)
-        self.device.flush()
+        self.portname = portname
+        self.device.flushInput()        
+        self.device.flushOutput()
         
         #self.version = self.ask("version")
         #print("Connected to Koheron controller version %s"%self.version)
         self.ramp = False
         
-        time.sleep(0.05)
+        time.sleep(1.0)
         
         # the controller has a maximum resistance (min temp) setting
-        self.device.write(b'rtmax 25000') # changes max res. to 25000 from 15000
+        self.device.write(b'rtmax 30000') # changes max res. to 25000 from 15000
+        time.sleep(1.0)
+        self.device.flushInput()        
+        self.device.flushOutput()
+        self.device.write(b'dgain 0.0005')
+        self.device.flushInput()        
+        self.device.flushOutput()
+        print("Connected to %s"%self.portname)
         
-        self.device.flush()
         
                 
     def write(self,command):
         command = command.encode('utf-8')
         self.device.write(command+b"\r")
+        self.device.flushInput()        
+        self.device.flushOutput()
     
     def ask(self,command):
+        self.device.flushInput()        
+        self.device.flushOutput()
         command = command.encode('utf-8')
         self.device.write(command+b"\r")
         time.sleep(0.050)  # this is important !
@@ -88,44 +103,73 @@ class KoheronController:
         curr = self.ask('ilaser') # in mA
         return curr
         
-    def increase_current(self,adjust=0.02):
-        """Increase laser current by 0.02 mA """
+    def increase_current(self,adjust=0.1):
+        """Increase laser current by 0.1 mA """
         curr = float(self.ask('ilaser'))
         if(curr<CURR_MAX and curr>CURR_MIN):
             curr+=adjust
             self.write('ilaser '+str(curr))
         
-    def decrease_current(self,adjust=0.02):
-        """ Decrease laser current by 0.02 mA """
+    def decrease_current(self,adjust=0.1):
+        """ Decrease laser current by 0.1 mA """
         curr = float(self.ask('ilaser'))
         if(curr<CURR_MAX and curr>CURR_MIN):
             curr-=adjust
             self.write('ilaser '+str(curr))
     
-    # def ramp_current(self,amplitude,n_steps = 80.0, freq = 100.0):
-    #     """Ramp laser diode with set amplitude in mA"""
-    #     time_delay = 1/(n_steps*freq) #in s
-    #     step_size = 2.0*amplitude/n_steps
-    #     curr = float(self.ask('ilaser')) #mA
-    #     
-    #     if(curr<CURR_MAX and curr>CURR_MIN):
-    #         self.ramp = True
-    #         print("Ramping - use keyboard interrupt to stop ramping")
-    #     
-    #     while(self.ramp):
-    #         try:
-    #             new_curr = curr - amplitude/2.0
-    #             for i in range(n_steps):
-    #                 self.write('ilaser '+str(new_curr))
-    #                 new_curr += step_size
-    #                 time.sleep(time_delay)
-    #             for i in range(n_steps):
-    #                 self.write('ilaser '+str(new_curr))
-    #                 new_curr -= step_size
-    #                 time.sleep(time_delay)
-    #         except(KeyboardInterrupt):
-    #             self.ramp = False
-    #             break
+    def ramp_current(self,amplitude,n_steps = 80.0, freq = 100.0):
+        """Ramp laser diode with set amplitude in mA"""
+        time_delay = 1/(n_steps*freq) #in s
+        step_size = 2.0*amplitude/n_steps
+        start_curr = float(self.ask('ilaser')) #mA
+        curr=start_curr
+        
+        if(start_curr<CURR_MAX and start_curr>CURR_MIN):
+            self.ramp = True
+            print("Ramping - use keyboard interrupt to stop ramping")
+        
+        while(self.ramp):
+            try:
+                new_curr = start_curr - amplitude/2.0
+                for i in range(n_steps):
+                    self.write('ilaser '+str(new_curr))
+                    new_curr += step_size
+                    time.sleep(time_delay)
+                for i in range(n_steps):
+                    self.write('ilaser '+str(new_curr))
+                    new_curr -= step_size
+                    time.sleep(time_delay)
+            except(KeyboardInterrupt):
+                self.ramp = False
+                break
+                
+    def log_pd(self):
+        now = datetime.datetime.fromtimestamp(time.time())
+        time_stamp = str(now.year)+"-"+str(now.month)+"-"+str(now.day)+"-"+str(now.hour)+":"+str(now.minute)+":"+str(now.second)
+
+        fname = 'laser_pd'+self.portname[-1]
+        filepath = os.path.join(fname+'_'+time_stamp+'.txt')
+
+        start_time = time.time()
+        global data_log
+        #data_log = []
+        while(True):
+            fp = open(filepath, 'a+')
+            try:
+                now = datetime.datetime.fromtimestamp(time.time())
+                pd_curr = float(self.ask('iphd'))
+                new_line = str(now.hour)+':'+str(now.minute)+":"+str(now.second)+','+str(pd_curr)
+                print(new_line)
+                fp.write(new_line+'\n')
+            except(KeyboardInterrupt):
+                break
+            except:
+                curr_time = time.time() - start_time
+                #data_log.append((curr_time,0.0))
+                fp.write('error\n')
+                pass
+            fp.close()
+        
 
         
 ## command list
